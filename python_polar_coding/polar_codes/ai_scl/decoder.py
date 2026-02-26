@@ -30,7 +30,6 @@ class _PathPruningNet(nn.Module):
         was_numpy = isinstance(X, np.ndarray)
         if was_numpy:
             X = torch.from_numpy(X.astype(np.float32))
-        self.eval()
         with torch.no_grad():
             out = self.forward(X)
         return out.cpu().numpy()
@@ -55,6 +54,8 @@ class AISCLDecoder(SCListDecoder):
                 self.ai_model = None
         else:
             self.ai_model = ai_model
+        if isinstance(self.ai_model, nn.Module):
+            self.ai_model.eval()
 
         # Deterministic mode (seed RNGs) to improve repeatability
         self.deterministic = bool(deterministic)
@@ -91,10 +92,7 @@ class AISCLDecoder(SCListDecoder):
         self._compute_intermediate_alpha(position)
         if self.mask[position] == 1:
             self._populate_paths()
-            # Conservative pruning: keep at least 1.25*L paths to maintain BER
-            # Only prune if we have more than twice the needed paths
-            if len(self.paths) > 2 * self.L:
-                # Prune to 1.25*L to be slightly more aggressive but safe
+            if position % 2 == 0 and len(self.paths) > 2 * self.L:
                 k = max(self.L + 1, int(1.25 * self.L)) if self.L > 1 else 2
                 self._prune_to_k_paths(k)
         if self.mask[position] == 0:
@@ -156,7 +154,8 @@ class AISCLDecoder(SCListDecoder):
                     llr = np.asarray(llr, dtype=np.float32)
                     bits = np.asarray(bits, dtype=np.float32)
                     N = len(llr)
-                    bits_pad = np.pad(bits, (0, N - len(bits)), 'constant')
+                    bits_pad = np.zeros(N, dtype=np.float32)
+                    bits_pad[:len(bits)] = bits
                     X_list.append(np.concatenate([llr, bits_pad]))
                 except Exception:
                     X_list.append(np.zeros(2 * self.N, dtype=np.float32))
@@ -208,7 +207,9 @@ class AISCLDecoder(SCListDecoder):
         # Final selection by path metric (deterministic)
         if len(self.paths) <= self.L:
             return
-        self.paths = sorted(self.paths, reverse=True)[:self.L]
+        metrics = np.array([p._path_metric for p in self.paths], dtype=np.float64)
+        idx = np.argpartition(-metrics, self.L - 1)[:self.L]
+        self.paths = [self.paths[int(i)] for i in idx]
     
     def _prune_to_k_paths(self, k):
         """Fast O(n) pruning to keep only top k paths."""

@@ -1,6 +1,9 @@
 import numpy as np
 from python_polar_coding.polar_codes.base.decoding_path import DecodingPathMixin
 from python_polar_coding.polar_codes.sc.decoder import SCDecoder
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 
 class AIPath(DecodingPathMixin, SCDecoder):
@@ -36,3 +39,27 @@ class AIPath(DecodingPathMixin, SCDecoder):
         except Exception:
             pass
         return float(self._path_metric)
+
+class PathPruningNet(nn.Module):
+    """Small MLP compatible with earlier tests. Accepts input shape (batch, 2*N)."""
+    def __init__(self, N):
+        super().__init__()
+        self.N = N
+        self.fc1 = nn.Linear(2 * N, 64)
+        self.fc2 = nn.Linear(64, 32)
+        self.fc3 = nn.Linear(32, 1)
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = torch.sigmoid(self.fc3(x)).squeeze(-1)
+        return x
+
+    def score_batch(self, X):
+        was_numpy = isinstance(X, np.ndarray)
+        if was_numpy:
+            X = torch.from_numpy(X.astype(np.float32))
+        self.eval()
+        with torch.no_grad():
+            out = self.forward(X)
+        return out.cpu().numpy()
