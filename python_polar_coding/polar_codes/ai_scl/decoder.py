@@ -22,7 +22,7 @@ class _PathPruningNet(nn.Module):
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = torch.sigmoid(self.fc3(x)).squeeze(-1)
+        x = self.fc3(x).squeeze(-1)
         return x
 
     def score_batch(self, X):
@@ -226,8 +226,6 @@ class AISCLDecoder(SCListDecoder):
     def _update_paths_metrics(self):
         for path in self.paths:
             path.update_path_metric()
-
-    
 
     def _reset_counters(self):
         pass

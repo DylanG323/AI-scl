@@ -4,7 +4,7 @@ from python_polar_coding.polar_codes.base import BaseDecoder
 from python_polar_coding.polar_codes.base import functions as functions
 
 from .decoding_path import SCPath
-
+from time import sleep
 
 class SCListDecoder(BaseDecoder):
     """SC List decoding."""
@@ -34,6 +34,7 @@ class SCListDecoder(BaseDecoder):
     def decode_internal(self, received_llr: np.array) -> np.array:
         """Implementation of SC decoding method."""
         # reset counters per frame
+        sleep(0.0005)
         self._reset_counters()
         self._set_initial_state(received_llr)
 
