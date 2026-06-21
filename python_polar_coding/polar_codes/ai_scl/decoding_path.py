@@ -46,7 +46,7 @@ class AIPath(DecodingPathMixin, SCDecoder):
 
 
 class PathPruningNet(nn.Module):
-    """Small MLP for AI-SCL path scoring (optimized)."""
+    """Small MLP for AI-SCL path scoring. Accepts input shape (batch, 2*N)."""
     def __init__(self, N):
         super().__init__()
         self.N = N
@@ -61,29 +61,11 @@ class PathPruningNet(nn.Module):
         return x
 
     def score_batch(self, X):
-        """Score multiple paths at once. X: (batch, 2*N)"""
-        if isinstance(X, np.ndarray):
+        """Score multiple paths at once. X: (batch, 2*N) numpy array or torch tensor."""
+        was_numpy = isinstance(X, np.ndarray)
+        if was_numpy:
             X = torch.from_numpy(X.astype(np.float32))
-        device = next(self.parameters()).device
-        X = X.to(device)
         self.eval()
         with torch.no_grad():
             out = self.forward(X)
         return out.cpu().numpy()
-
-
-# ---------------- Example of faster _ai_prune_paths usage -----------------
-# Instead of calling score_ai() per path, collect features of all paths and
-# call score_batch once. Do this inside AISCLDecoder._ai_prune_paths:
-#
-# X_list = []
-# for path in self.paths:
-#     llr = path.intermediate_llr[0] if path.intermediate_llr[0] is not None else np.zeros(N, dtype=np.float32)
-#     bits = path.intermediate_bits[-1] if path.intermediate_bits[-1] is not None else np.zeros(0, dtype=np.float32)
-#     bits_pad = np.zeros(N, dtype=np.float32)
-#     bits_pad[:len(bits)] = bits
-#     X_list.append(np.concatenate([llr, bits_pad]))
-# X_batch = np.stack(X_list, axis=0)
-# scores = self.ai_model.score_batch(X_batch)
-# keep_idx = np.argpartition(-scores, keep_k-1)[:keep_k]
-# self.paths = [self.paths[int(i)] for i in keep_idx]
